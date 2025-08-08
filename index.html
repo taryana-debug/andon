@@ -1,0 +1,308 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Andon Monitoring Visual</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100">
+  <!-- Menu -->
+  <div class="bg-white shadow-md">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
+      <h1 class="text-xl font-bold">Andon Monitoring</h1>
+      <div class="space-x-4">
+        <button id="btn-produksi" onclick="showSection('produksi')" class="text-blue-600 hover:underline">Produksi</button>
+        <button id="btn-qc" onclick="showSection('qc')" class="text-blue-600 hover:underline">QC</button>
+        <button id="btn-problemTools" onclick="showSection('problemTools')" class="text-blue-600 hover:underline">Problem Tooling</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="max-w-7xl mx-auto p-6">
+    <!-- PRODUKSI -->
+    <div id="produksi-section">
+      <h2 class="text-xl font-semibold mb-4">Dashboard & Kontrol Mesin</h2>
+      <div id="monitoring" class="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-8"></div>
+      <div id="control-panel" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+      <div class="text-center mt-8">
+        <button onclick="resetAll()" class="bg-gray-700 text-white px-6 py-2 rounded shadow hover:bg-gray-800">Reset Semua ke NO SCHEDULE</button>
+      </div>
+    </div>
+
+    <!-- QC -->
+    <div id="qc-section" class="hidden">
+      <h2 class="text-xl font-semibold mb-4">Dashboard QC - Mesin dengan Status CEK QC FIRST SAMPLE / PROBLEM QUALITY</h2>
+      <div id="qc-dashboard" class="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-8"></div>
+      <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-2">
+        <div class="flex items-center gap-2">
+          <label class="text-sm">Filter Tanggal:</label>
+          <input type="date" id="filterDate" class="border px-2 py-1 rounded" onchange="renderQCLog()">
+        </div>
+        <div class="flex gap-2">
+          <button onclick="exportQCLogToCSV()" class="bg-green-600 text-white px-4 py-1 text-sm rounded hover:bg-green-700">Export QC Log</button>
+          <button onclick="clearQCLog()" class="bg-red-600 text-white px-4 py-1 text-sm rounded hover:bg-red-700">Clear Log</button>
+        </div>
+      </div>
+      <table class="min-w-full bg-white border border-gray-300 text-sm">
+        <thead>
+          <tr>
+            <th class="border px-4 py-2">Mesin</th>
+            <th class="border px-4 py-2">Status</th>
+            <th class="border px-4 py-2">Start</th>
+            <th class="border px-4 py-2">End</th>
+          </tr>
+        </thead>
+        <tbody id="qc-log"></tbody>
+      </table>
+      <p id="log-count" class="text-sm text-gray-500 mt-2"></p>
+    </div>
+
+    <!-- PROBLEM TOOLS -->
+    <div id="problem-tools-section" class="hidden">
+      <h2 class="text-xl font-semibold mb-4">Dashboard Problem Tooling - Mesin dengan Status PROBLEM TOOLS / PROBLEM MACHINE</h2>
+      <div id="tools-dashboard" class="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-8"></div>
+    </div>
+  </div>
+
+  <script>
+    const statusMap = {
+      "NORMAL": "bg-lime-500",
+      "PROBLEM TOOLS": "bg-red-600",
+      "PROBLEM QUALITY": "bg-gray-400",
+      "PROBLEM MACHINE": "bg-amber-400",
+      "NO MANPOWER": "bg-blue-600",
+      "NO SCHEDULE": "bg-white border border-black",
+      "SETTING / GANTI MODEL": "bg-yellow-300",
+      "CEK QC FIRST SAMPLE": "bg-cyan-300"
+    };
+
+    const mesinList = Array.from({ length: 10 }, (_, i) => ({
+      id: i + 1,
+      name: `Mesin ${i + 1}`,
+      status: "NORMAL",
+      updatedAt: new Date(),
+      qcStart: null
+    }));
+
+    const qcLog = [];
+
+    function renderMonitoring() {
+      const monitoring = document.getElementById("monitoring");
+      const qcDashboard = document.getElementById("qc-dashboard");
+      const toolsDashboard = document.getElementById("tools-dashboard");
+
+      monitoring.innerHTML = "";
+      qcDashboard.innerHTML = "";
+      toolsDashboard.innerHTML = "";
+
+      mesinList.forEach((mesin, index) => {
+        const color = statusMap[mesin.status] || "bg-gray-200";
+        const time = mesin.updatedAt.toLocaleTimeString();
+        const qcStartTime = mesin.qcStart ? `<p class='text-xs text-gray-500'>Start: ${mesin.qcStart.toLocaleTimeString()}</p>` : "";
+
+        const baseBox = `
+          <div class="flex flex-col items-center justify-center bg-white p-4 rounded shadow">
+            <div class="w-16 h-16 rounded ${color} mb-2"></div>
+            <p class="text-sm font-medium">${mesin.name}</p>
+            <p class="text-xs text-gray-500 text-center">${mesin.status}</p>
+            ${qcStartTime}
+            <p class="text-xs text-gray-400 mt-1">${time}</p>
+        `;
+
+        const endBox = `</div>`;
+
+        monitoring.innerHTML += baseBox + endBox;
+
+        if (mesin.status === "CEK QC FIRST SAMPLE" || mesin.status === "PROBLEM QUALITY") {
+          qcDashboard.innerHTML += baseBox + `
+            <div class="flex gap-2 mt-2">
+              <button onclick="logQC(${index}, 'NORMAL')" class="bg-green-500 px-2 py-1 text-white text-xs rounded hover:bg-green-600">OK</button>
+              <button onclick="logQC(${index}, 'PROBLEM QUALITY')" class="bg-red-500 px-2 py-1 text-white text-xs rounded hover:bg-red-600">NG</button>
+            </div>
+          ` + endBox;
+        }
+
+        if (mesin.status === "PROBLEM TOOLS" || mesin.status === "PROBLEM MACHINE") {
+          toolsDashboard.innerHTML += baseBox + `
+            <div class="flex gap-2 mt-2">
+              <button onclick="updateStatus(${index}, 'NORMAL')" class="bg-green-500 px-2 py-1 text-white text-xs rounded hover:bg-green-600">OK</button>
+              <button onclick="setToSetting(${index})" class="bg-orange-500 px-2 py-1 text-white text-xs rounded hover:bg-orange-600">TURUN</button>
+            </div>
+          ` + endBox;
+        }
+      });
+    }
+
+    function renderControls() {
+      const control = document.getElementById("control-panel");
+      control.innerHTML = "";
+
+      mesinList.forEach((mesin, index) => {
+        control.innerHTML += `
+          <div class="bg-white p-4 rounded shadow">
+            <h3 class="text-lg font-semibold mb-2">${mesin.name}</h3>
+            <p class="mb-2">Status: <span class="font-bold">${mesin.status}</span></p>
+            <div class="grid grid-cols-2 gap-2">
+              ${Object.keys(statusMap).map(status => `
+                <button onclick="updateStatus(${index}, '${status}')" class="${statusMap[status]} text-black px-2 py-1 text-xs rounded whitespace-nowrap">${status}</button>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      });
+    }
+
+    function updateStatus(index, status) {
+      mesinList[index].status = status;
+      mesinList[index].updatedAt = new Date();
+      mesinList[index].qcStart = (status === "CEK QC FIRST SAMPLE" || status === "PROBLEM QUALITY") ? new Date() : null;
+      renderMonitoring();
+      renderControls();
+      renderQCLog();
+    }
+
+    function logQC(index, resultStatus) {
+      const mesin = mesinList[index];
+      const end = new Date();
+      qcLog.push({
+        name: mesin.name,
+        status: resultStatus,
+        start: mesin.qcStart ? mesin.qcStart.toLocaleTimeString() : '-',
+        end: end.toLocaleTimeString()
+      });
+      updateStatus(index, resultStatus);
+    }
+
+    function renderQCLog() {
+      const logTable = document.getElementById("qc-log");
+      const filterDate = document.getElementById("filterDate").value;
+
+      const filteredLog = qcLog.filter(entry => {
+        if (!filterDate) return true;
+        const today = new Date(filterDate);
+        const [hour, min, sec] = entry.start.split(":");
+        const entryDate = new Date();
+        entryDate.setHours(hour, min, sec, 0);
+        return entryDate.toISOString().slice(0, 10) === filterDate;
+      });
+
+      logTable.innerHTML = filteredLog.map(entry => `
+        <tr>
+          <td class="border px-4 py-1">${entry.name}</td>
+          <td class="border px-4 py-1">${entry.status}</td>
+          <td class="border px-4 py-1">${entry.start}</td>
+          <td class="border px-4 py-1">${entry.end}</td>
+        </tr>
+      `).join('');
+
+      document.getElementById("log-count").textContent = `Total log: ${filteredLog.length}`;
+    }
+
+    function resetAll() {
+      mesinList.forEach(mesin => {
+        mesin.status = "NO SCHEDULE";
+        mesin.updatedAt = new Date();
+        mesin.qcStart = null;
+      });
+      renderMonitoring();
+      renderControls();
+      renderQCLog();
+    }
+
+    function setToSetting(index) {
+      mesinList[index].status = "SETTING / GANTI MODEL";
+      mesinList[index].updatedAt = new Date();
+      mesinList[index].qcStart = null;
+      renderMonitoring();
+      renderControls();
+    }
+
+    function showSection(section) {
+      document.getElementById("produksi-section").classList.add("hidden");
+      document.getElementById("qc-section").classList.add("hidden");
+      document.getElementById("problem-tools-section").classList.add("hidden");
+
+      document.getElementById("btn-produksi").classList.remove("font-bold", "underline");
+      document.getElementById("btn-qc").classList.remove("font-bold", "underline");
+      document.getElementById("btn-problemTools").classList.remove("font-bold", "underline");
+
+      if (section === "produksi") {
+        document.getElementById("produksi-section").classList.remove("hidden");
+        document.getElementById("btn-produksi").classList.add("font-bold", "underline");
+      } else if (section === "qc") {
+        document.getElementById("qc-section").classList.remove("hidden");
+        document.getElementById("btn-qc").classList.add("font-bold", "underline");
+      } else if (section === "problemTools") {
+        document.getElementById("problem-tools-section").classList.remove("hidden");
+        document.getElementById("btn-problemTools").classList.add("font-bold", "underline");
+      }
+    }
+
+    function exportQCLogToCSV() {
+      if (qcLog.length === 0) {
+        alert("Log QC masih kosong.");
+        return;
+      }
+
+      let csvContent = "data:text/csv;charset=utf-8,";
+      csvContent += "Mesin;Status;Start;End\n";
+      qcLog.forEach(entry => {
+        csvContent += `${entry.name};${entry.status};${entry.start};${entry.end}\n`;
+      });
+
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `qc_log_${new Date().toISOString().slice(0,10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    function clearQCLog() {
+      if (confirm("Apakah Anda yakin ingin menghapus semua log QC?")) {
+        qcLog.length = 0;
+        renderQCLog();
+        saveToLocal();
+      }
+    }
+
+    function saveToLocal() {
+      localStorage.setItem("mesinList", JSON.stringify(mesinList));
+      localStorage.setItem("qcLog", JSON.stringify(qcLog));
+    }
+
+    function loadFromLocal() {
+      const savedMesin = JSON.parse(localStorage.getItem("mesinList"));
+      const savedLog = JSON.parse(localStorage.getItem("qcLog"));
+      if (savedMesin) {
+        savedMesin.forEach((m, i) => {
+          mesinList[i].status = m.status;
+          mesinList[i].updatedAt = new Date(m.updatedAt);
+          mesinList[i].qcStart = m.qcStart ? new Date(m.qcStart) : null;
+        });
+      }
+      if (savedLog) {
+        qcLog.length = 0;
+        qcLog.push(...savedLog);
+      }
+    }
+
+    window.addEventListener("beforeunload", saveToLocal);
+    window.addEventListener("load", () => {
+      loadFromLocal();
+      renderMonitoring();
+      renderControls();
+      renderQCLog();
+
+      setInterval(() => {
+        renderMonitoring();
+        renderControls();
+        renderQCLog();
+      }, 10000); // auto-refresh setiap 10 detik
+    });
+  </script>
+</body>
+</html>
+
