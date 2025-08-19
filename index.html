@@ -1,20 +1,23 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Andon Monitoring Visual</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
 </head>
+
 <body class="bg-gray-100">
-  <!-- Menu -->
+  <!-- Menu Tab di Atas -->
   <div class="bg-white shadow-md">
     <div class="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
       <h1 class="text-xl font-bold">Andon Monitoring</h1>
       <div class="space-x-4">
-        <button id="btn-produksi" onclick="showSection('produksi')" class="text-blue-600 hover:underline">Produksi</button>
-        <button id="btn-qc" onclick="showSection('qc')" class="text-blue-600 hover:underline">QC</button>
-        <button id="btn-problemTools" onclick="showSection('problemTools')" class="text-blue-600 hover:underline">Problem Tooling</button>
+        <button onclick="showSection('produksi')" class="text-blue-600 hover:underline">Produksi</button>
+        <button onclick="showSection('qc')" class="text-blue-600 hover:underline">QC</button>
+        <button onclick="showSection('problemTools')" class="text-blue-600 hover:underline">Problem Tooling</button>
       </div>
     </div>
   </div>
@@ -34,17 +37,8 @@
     <div id="qc-section" class="hidden">
       <h2 class="text-xl font-semibold mb-4">Dashboard QC - Mesin dengan Status CEK QC FIRST SAMPLE / PROBLEM QUALITY</h2>
       <div id="qc-dashboard" class="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-8"></div>
-      <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-2">
-        <div class="flex items-center gap-2">
-          <label class="text-sm">Filter Tanggal:</label>
-          <input type="date" id="filterDate" class="border px-2 py-1 rounded" onchange="renderQCLog()">
-        </div>
-        <div class="flex gap-2">
-          <button onclick="exportQCLogToCSV()" class="bg-green-600 text-white px-4 py-1 text-sm rounded hover:bg-green-700">Export QC Log</button>
-          <button onclick="clearQCLog()" class="bg-red-600 text-white px-4 py-1 text-sm rounded hover:bg-red-700">Clear Log</button>
-        </div>
-      </div>
-      <table class="min-w-full bg-white border border-gray-300 text-sm">
+      <h3 class="text-lg font-semibold mt-6 mb-2">Log QC</h3>
+      <table class="min-w-full bg-white border border-gray-300">
         <thead>
           <tr>
             <th class="border px-4 py-2">Mesin</th>
@@ -55,7 +49,6 @@
         </thead>
         <tbody id="qc-log"></tbody>
       </table>
-      <p id="log-count" class="text-sm text-gray-500 mt-2"></p>
     </div>
 
     <!-- PROBLEM TOOLS -->
@@ -117,8 +110,8 @@
         if (mesin.status === "CEK QC FIRST SAMPLE" || mesin.status === "PROBLEM QUALITY") {
           qcDashboard.innerHTML += baseBox + `
             <div class="flex gap-2 mt-2">
-              <button onclick="logQC(${index}, 'NORMAL')" class="bg-green-500 px-2 py-1 text-white text-xs rounded hover:bg-green-600">OK</button>
-              <button onclick="logQC(${index}, 'PROBLEM QUALITY')" class="bg-red-500 px-2 py-1 text-white text-xs rounded hover:bg-red-600">NG</button>
+              <button onclick="logQC(${index}, 'NORMAL')" class="bg-green-500 px-2 py-1 text-white text-xs rounded">OK</button>
+              <button onclick="logQC(${index}, 'PROBLEM QUALITY')" class="bg-red-500 px-2 py-1 text-white text-xs rounded">NG</button>
             </div>
           ` + endBox;
         }
@@ -126,8 +119,8 @@
         if (mesin.status === "PROBLEM TOOLS" || mesin.status === "PROBLEM MACHINE") {
           toolsDashboard.innerHTML += baseBox + `
             <div class="flex gap-2 mt-2">
-              <button onclick="updateStatus(${index}, 'NORMAL')" class="bg-green-500 px-2 py-1 text-white text-xs rounded hover:bg-green-600">OK</button>
-              <button onclick="setToSetting(${index})" class="bg-orange-500 px-2 py-1 text-white text-xs rounded hover:bg-orange-600">TURUN</button>
+              <button onclick="updateStatus(${index}, 'NORMAL')" class="bg-green-500 px-2 py-1 text-white text-xs rounded">OK</button>
+              <button onclick="setToSetting(${index})" class="bg-orange-500 px-2 py-1 text-white text-xs rounded">TURUN</button>
             </div>
           ` + endBox;
         }
@@ -156,7 +149,11 @@
     function updateStatus(index, status) {
       mesinList[index].status = status;
       mesinList[index].updatedAt = new Date();
-      mesinList[index].qcStart = (status === "CEK QC FIRST SAMPLE" || status === "PROBLEM QUALITY") ? new Date() : null;
+      if (status === "CEK QC FIRST SAMPLE" || status === "PROBLEM QUALITY") {
+        mesinList[index].qcStart = new Date();
+      } else {
+        mesinList[index].qcStart = null;
+      }
       renderMonitoring();
       renderControls();
       renderQCLog();
@@ -176,27 +173,14 @@
 
     function renderQCLog() {
       const logTable = document.getElementById("qc-log");
-      const filterDate = document.getElementById("filterDate").value;
-
-      const filteredLog = qcLog.filter(entry => {
-        if (!filterDate) return true;
-        const today = new Date(filterDate);
-        const [hour, min, sec] = entry.start.split(":");
-        const entryDate = new Date();
-        entryDate.setHours(hour, min, sec, 0);
-        return entryDate.toISOString().slice(0, 10) === filterDate;
-      });
-
-      logTable.innerHTML = filteredLog.map(entry => `
+      logTable.innerHTML = qcLog.map(entry => `
         <tr>
-          <td class="border px-4 py-1">${entry.name}</td>
-          <td class="border px-4 py-1">${entry.status}</td>
-          <td class="border px-4 py-1">${entry.start}</td>
-          <td class="border px-4 py-1">${entry.end}</td>
+          <td class="border px-4 py-1 text-sm">${entry.name}</td>
+          <td class="border px-4 py-1 text-sm">${entry.status}</td>
+          <td class="border px-4 py-1 text-sm">${entry.start}</td>
+          <td class="border px-4 py-1 text-sm">${entry.end}</td>
         </tr>
       `).join('');
-
-      document.getElementById("log-count").textContent = `Total log: ${filteredLog.length}`;
     }
 
     function resetAll() {
@@ -223,86 +207,19 @@
       document.getElementById("qc-section").classList.add("hidden");
       document.getElementById("problem-tools-section").classList.add("hidden");
 
-      document.getElementById("btn-produksi").classList.remove("font-bold", "underline");
-      document.getElementById("btn-qc").classList.remove("font-bold", "underline");
-      document.getElementById("btn-problemTools").classList.remove("font-bold", "underline");
-
       if (section === "produksi") {
         document.getElementById("produksi-section").classList.remove("hidden");
-        document.getElementById("btn-produksi").classList.add("font-bold", "underline");
       } else if (section === "qc") {
         document.getElementById("qc-section").classList.remove("hidden");
-        document.getElementById("btn-qc").classList.add("font-bold", "underline");
       } else if (section === "problemTools") {
         document.getElementById("problem-tools-section").classList.remove("hidden");
-        document.getElementById("btn-problemTools").classList.add("font-bold", "underline");
       }
     }
 
-    function exportQCLogToCSV() {
-      if (qcLog.length === 0) {
-        alert("Log QC masih kosong.");
-        return;
-      }
-
-      let csvContent = "data:text/csv;charset=utf-8,";
-      csvContent += "Mesin;Status;Start;End\n";
-      qcLog.forEach(entry => {
-        csvContent += `${entry.name};${entry.status};${entry.start};${entry.end}\n`;
-      });
-
-      const encodedUri = encodeURI(csvContent);
-      const link = document.createElement("a");
-      link.setAttribute("href", encodedUri);
-      link.setAttribute("download", `qc_log_${new Date().toISOString().slice(0,10)}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    }
-
-    function clearQCLog() {
-      if (confirm("Apakah Anda yakin ingin menghapus semua log QC?")) {
-        qcLog.length = 0;
-        renderQCLog();
-        saveToLocal();
-      }
-    }
-
-    function saveToLocal() {
-      localStorage.setItem("mesinList", JSON.stringify(mesinList));
-      localStorage.setItem("qcLog", JSON.stringify(qcLog));
-    }
-
-    function loadFromLocal() {
-      const savedMesin = JSON.parse(localStorage.getItem("mesinList"));
-      const savedLog = JSON.parse(localStorage.getItem("qcLog"));
-      if (savedMesin) {
-        savedMesin.forEach((m, i) => {
-          mesinList[i].status = m.status;
-          mesinList[i].updatedAt = new Date(m.updatedAt);
-          mesinList[i].qcStart = m.qcStart ? new Date(m.qcStart) : null;
-        });
-      }
-      if (savedLog) {
-        qcLog.length = 0;
-        qcLog.push(...savedLog);
-      }
-    }
-
-    window.addEventListener("beforeunload", saveToLocal);
-    window.addEventListener("load", () => {
-      loadFromLocal();
-      renderMonitoring();
-      renderControls();
-      renderQCLog();
-
-      setInterval(() => {
-        renderMonitoring();
-        renderControls();
-        renderQCLog();
-      }, 10000); // auto-refresh setiap 10 detik
-    });
+    renderMonitoring();
+    renderControls();
+    renderQCLog();
   </script>
 </body>
-</html>
 
+</html>
