@@ -1,225 +1,149 @@
 <!DOCTYPE html>
-<html lang="en">
-
+<html lang="id">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Andon Monitoring Visual</title>
+  <meta charset="UTF-8">
+  <title>Andon Monitoring Realtime</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js"></script>
 </head>
+<body class="bg-gray-900 text-white min-h-screen p-4">
 
-<body class="bg-gray-100">
-  <!-- Menu Tab di Atas -->
-  <div class="bg-white shadow-md">
-    <div class="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
-      <h1 class="text-xl font-bold">Andon Monitoring</h1>
-      <div class="space-x-4">
-        <button onclick="showSection('produksi')" class="text-blue-600 hover:underline">Produksi</button>
-        <button onclick="showSection('qc')" class="text-blue-600 hover:underline">QC</button>
-        <button onclick="showSection('problemTools')" class="text-blue-600 hover:underline">Problem Tooling</button>
-      </div>
-    </div>
-  </div>
+  <h1 class="text-2xl font-bold mb-4 text-center">📊 Andon Monitoring Realtime</h1>
 
-  <div class="max-w-7xl mx-auto p-6">
-    <!-- PRODUKSI -->
-    <div id="produksi-section">
-      <h2 class="text-xl font-semibold mb-4">Dashboard & Kontrol Mesin</h2>
-      <div id="monitoring" class="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-8"></div>
-      <div id="control-panel" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
-      <div class="text-center mt-8">
-        <button onclick="resetAll()" class="bg-gray-700 text-white px-6 py-2 rounded shadow hover:bg-gray-800">Reset Semua ke NO SCHEDULE</button>
-      </div>
-    </div>
+  <!-- Monitoring -->
+  <div id="monitoring" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8"></div>
 
-    <!-- QC -->
-    <div id="qc-section" class="hidden">
-      <h2 class="text-xl font-semibold mb-4">Dashboard QC - Mesin dengan Status CEK QC FIRST SAMPLE / PROBLEM QUALITY</h2>
-      <div id="qc-dashboard" class="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-8"></div>
-      <h3 class="text-lg font-semibold mt-6 mb-2">Log QC</h3>
-      <table class="min-w-full bg-white border border-gray-300">
-        <thead>
-          <tr>
-            <th class="border px-4 py-2">Mesin</th>
-            <th class="border px-4 py-2">Status</th>
-            <th class="border px-4 py-2">Start</th>
-            <th class="border px-4 py-2">End</th>
-          </tr>
-        </thead>
-        <tbody id="qc-log"></tbody>
-      </table>
-    </div>
+  <!-- Kontrol -->
+  <h2 class="text-xl font-semibold mb-2">⚙️ Kontrol Mesin</h2>
+  <div id="controls" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8"></div>
 
-    <!-- PROBLEM TOOLS -->
-    <div id="problem-tools-section" class="hidden">
-      <h2 class="text-xl font-semibold mb-4">Dashboard Problem Tooling - Mesin dengan Status PROBLEM TOOLS / PROBLEM MACHINE</h2>
-      <div id="tools-dashboard" class="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-8"></div>
-    </div>
+  <!-- QC Log -->
+  <h2 class="text-xl font-semibold mb-2">📋 QC Log</h2>
+  <div id="qc-log" class="overflow-x-auto">
+    <table class="table-auto border-collapse border border-gray-600 w-full text-sm">
+      <thead>
+        <tr class="bg-gray-700">
+          <th class="border border-gray-600 px-2 py-1">Mesin</th>
+          <th class="border border-gray-600 px-2 py-1">Status</th>
+          <th class="border border-gray-600 px-2 py-1">Waktu</th>
+        </tr>
+      </thead>
+      <tbody id="qcLogTable"></tbody>
+    </table>
   </div>
 
   <script>
-    const statusMap = {
-      "NORMAL": "bg-lime-500",
-      "PROBLEM TOOLS": "bg-red-600",
-      "PROBLEM QUALITY": "bg-gray-400",
-      "PROBLEM MACHINE": "bg-amber-400",
-      "NO MANPOWER": "bg-blue-600",
-      "NO SCHEDULE": "bg-white border border-black",
-      "SETTING / GANTI MODEL": "bg-yellow-300",
-      "CEK QC FIRST SAMPLE": "bg-cyan-300"
+    // 🔥 Konfigurasi Firebase (ganti dengan punyamu dari Firebase Console)
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+      databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_PROJECT_ID.appspot.com",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID"
     };
 
-    const mesinList = Array.from({ length: 10 }, (_, i) => ({
-      id: i + 1,
-      name: `Mesin ${i + 1}`,
-      status: "NORMAL",
-      updatedAt: new Date(),
-      qcStart: null
-    }));
+    // Init Firebase
+    const app = firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
 
-    const qcLog = [];
+    // Data mesin awal
+    let mesinList = [
+      { id: 1, nama: "Mesin 1", status: "RUNNING", updatedAt: null, qcStart: null },
+      { id: 2, nama: "Mesin 2", status: "STOP", updatedAt: null, qcStart: null },
+      { id: 3, nama: "Mesin 3", status: "RUNNING", updatedAt: null, qcStart: null },
+      { id: 4, nama: "Mesin 4", status: "STOP", updatedAt: null, qcStart: null }
+    ];
 
-    function renderMonitoring() {
-      const monitoring = document.getElementById("monitoring");
-      const qcDashboard = document.getElementById("qc-dashboard");
-      const toolsDashboard = document.getElementById("tools-dashboard");
+    // Simpan awal ke Firebase kalau kosong
+    firebase.database().ref("mesinList").once("value", (snapshot) => {
+      if (!snapshot.exists()) {
+        firebase.database().ref("mesinList").set(mesinList);
+      }
+    });
 
-      monitoring.innerHTML = "";
-      qcDashboard.innerHTML = "";
-      toolsDashboard.innerHTML = "";
+    // Listener realtime Firebase
+    firebase.database().ref("mesinList").on("value", (snapshot) => {
+      if (snapshot.exists()) {
+        mesinList = snapshot.val();
+        renderMonitoring();
+        renderControls();
+        renderQCLog();
+      }
+    });
 
-      mesinList.forEach((mesin, index) => {
-        const color = statusMap[mesin.status] || "bg-gray-200";
-        const time = mesin.updatedAt.toLocaleTimeString();
-        const qcStartTime = mesin.qcStart ? `<p class='text-xs text-gray-500'>Start: ${mesin.qcStart.toLocaleTimeString()}</p>` : "";
+    // Update status ke Firebase
+    function updateStatus(index, status) {
+      mesinList[index].status = status;
+      mesinList[index].updatedAt = new Date().toISOString();
+      if (status === "CEK QC FIRST SAMPLE" || status === "PROBLEM QUALITY") {
+        mesinList[index].qcStart = new Date().toISOString();
+      } else {
+        mesinList[index].qcStart = null;
+      }
 
-        const baseBox = `
-          <div class="flex flex-col items-center justify-center bg-white p-4 rounded shadow">
-            <div class="w-16 h-16 rounded ${color} mb-2"></div>
-            <p class="text-sm font-medium">${mesin.name}</p>
-            <p class="text-xs text-gray-500 text-center">${mesin.status}</p>
-            ${qcStartTime}
-            <p class="text-xs text-gray-400 mt-1">${time}</p>
-        `;
-
-        const endBox = `</div>`;
-
-        monitoring.innerHTML += baseBox + endBox;
-
-        if (mesin.status === "CEK QC FIRST SAMPLE" || mesin.status === "PROBLEM QUALITY") {
-          qcDashboard.innerHTML += baseBox + `
-            <div class="flex gap-2 mt-2">
-              <button onclick="logQC(${index}, 'NORMAL')" class="bg-green-500 px-2 py-1 text-white text-xs rounded">OK</button>
-              <button onclick="logQC(${index}, 'PROBLEM QUALITY')" class="bg-red-500 px-2 py-1 text-white text-xs rounded">NG</button>
-            </div>
-          ` + endBox;
-        }
-
-        if (mesin.status === "PROBLEM TOOLS" || mesin.status === "PROBLEM MACHINE") {
-          toolsDashboard.innerHTML += baseBox + `
-            <div class="flex gap-2 mt-2">
-              <button onclick="updateStatus(${index}, 'NORMAL')" class="bg-green-500 px-2 py-1 text-white text-xs rounded">OK</button>
-              <button onclick="setToSetting(${index})" class="bg-orange-500 px-2 py-1 text-white text-xs rounded">TURUN</button>
-            </div>
-          ` + endBox;
-        }
-      });
+      firebase.database().ref("mesinList").set(mesinList);
     }
 
-    function renderControls() {
-      const control = document.getElementById("control-panel");
-      control.innerHTML = "";
+    // Render Monitoring
+    function renderMonitoring() {
+      const container = document.getElementById("monitoring");
+      container.innerHTML = "";
+      mesinList.forEach((mesin) => {
+        const warna =
+          mesin.status === "RUNNING" ? "bg-green-600" :
+          mesin.status === "STOP" ? "bg-red-600" :
+          mesin.status === "CEK QC FIRST SAMPLE" ? "bg-yellow-500" :
+          "bg-purple-600";
 
-      mesinList.forEach((mesin, index) => {
-        control.innerHTML += `
-          <div class="bg-white p-4 rounded shadow">
-            <h3 class="text-lg font-semibold mb-2">${mesin.name}</h3>
-            <p class="mb-2">Status: <span class="font-bold">${mesin.status}</span></p>
-            <div class="grid grid-cols-2 gap-2">
-              ${Object.keys(statusMap).map(status => `
-                <button onclick="updateStatus(${index}, '${status}')" class="${statusMap[status]} text-black px-2 py-1 text-xs rounded whitespace-nowrap">${status}</button>
-              `).join('')}
-            </div>
+        container.innerHTML += `
+          <div class="p-4 rounded-xl shadow-lg text-center ${warna}">
+            <h3 class="font-bold text-lg">${mesin.nama}</h3>
+            <p class="text-sm">${mesin.status}</p>
+            <p class="text-xs mt-1">${mesin.updatedAt ? new Date(mesin.updatedAt).toLocaleTimeString() : "-"}</p>
           </div>
         `;
       });
     }
 
-    function updateStatus(index, status) {
-      mesinList[index].status = status;
-      mesinList[index].updatedAt = new Date();
-      if (status === "CEK QC FIRST SAMPLE" || status === "PROBLEM QUALITY") {
-        mesinList[index].qcStart = new Date();
-      } else {
-        mesinList[index].qcStart = null;
-      }
-      renderMonitoring();
-      renderControls();
-      renderQCLog();
-    }
-
-    function logQC(index, resultStatus) {
-      const mesin = mesinList[index];
-      const end = new Date();
-      qcLog.push({
-        name: mesin.name,
-        status: resultStatus,
-        start: mesin.qcStart ? mesin.qcStart.toLocaleTimeString() : '-',
-        end: end.toLocaleTimeString()
+    // Render Controls
+    function renderControls() {
+      const container = document.getElementById("controls");
+      container.innerHTML = "";
+      mesinList.forEach((mesin, index) => {
+        container.innerHTML += `
+          <div class="p-3 border border-gray-700 rounded-xl">
+            <h3 class="font-bold mb-2">${mesin.nama}</h3>
+            <button class="bg-green-500 px-2 py-1 rounded mr-1" onclick="updateStatus(${index}, 'RUNNING')">RUN</button>
+            <button class="bg-red-500 px-2 py-1 rounded mr-1" onclick="updateStatus(${index}, 'STOP')">STOP</button>
+            <button class="bg-yellow-500 px-2 py-1 rounded mr-1" onclick="updateStatus(${index}, 'CEK QC FIRST SAMPLE')">QC</button>
+            <button class="bg-purple-600 px-2 py-1 rounded" onclick="updateStatus(${index}, 'PROBLEM QUALITY')">PROBLEM</button>
+          </div>
+        `;
       });
-      updateStatus(index, resultStatus);
     }
 
+    // Render QC Log
     function renderQCLog() {
-      const logTable = document.getElementById("qc-log");
-      logTable.innerHTML = qcLog.map(entry => `
-        <tr>
-          <td class="border px-4 py-1 text-sm">${entry.name}</td>
-          <td class="border px-4 py-1 text-sm">${entry.status}</td>
-          <td class="border px-4 py-1 text-sm">${entry.start}</td>
-          <td class="border px-4 py-1 text-sm">${entry.end}</td>
-        </tr>
-      `).join('');
-    }
-
-    function resetAll() {
-      mesinList.forEach(mesin => {
-        mesin.status = "NO SCHEDULE";
-        mesin.updatedAt = new Date();
-        mesin.qcStart = null;
+      const table = document.getElementById("qcLogTable");
+      table.innerHTML = "";
+      mesinList.forEach((mesin) => {
+        if (mesin.qcStart) {
+          table.innerHTML += `
+            <tr>
+              <td class="border border-gray-600 px-2 py-1">${mesin.nama}</td>
+              <td class="border border-gray-600 px-2 py-1">${mesin.status}</td>
+              <td class="border border-gray-600 px-2 py-1">${new Date(mesin.qcStart).toLocaleTimeString()}</td>
+            </tr>
+          `;
+        }
       });
-      renderMonitoring();
-      renderControls();
-      renderQCLog();
     }
-
-    function setToSetting(index) {
-      mesinList[index].status = "SETTING / GANTI MODEL";
-      mesinList[index].updatedAt = new Date();
-      mesinList[index].qcStart = null;
-      renderMonitoring();
-      renderControls();
-    }
-
-    function showSection(section) {
-      document.getElementById("produksi-section").classList.add("hidden");
-      document.getElementById("qc-section").classList.add("hidden");
-      document.getElementById("problem-tools-section").classList.add("hidden");
-
-      if (section === "produksi") {
-        document.getElementById("produksi-section").classList.remove("hidden");
-      } else if (section === "qc") {
-        document.getElementById("qc-section").classList.remove("hidden");
-      } else if (section === "problemTools") {
-        document.getElementById("problem-tools-section").classList.remove("hidden");
-      }
-    }
-
-    renderMonitoring();
-    renderControls();
-    renderQCLog();
   </script>
 </body>
-
 </html>
+
